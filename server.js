@@ -25,7 +25,7 @@ const PADDLE_SPEED = 6;
 const PADDLE_EDGE_DIST = 20;
 //ball properties
 const BALL_SIZE = 10;
-const BALL_SPEED = 5;
+const BALL_SPEED = 4;
 
 //superpower properties
 const POWERUP_SIZE = 20;
@@ -295,7 +295,7 @@ setInterval(() =>{
 
   const now = Date.now();
   const delta = now - lastTickTime;
-  const deltaMultiplier = delta/(1000/60);
+  let deltaMultiplier = Math.min(delta/(1000/60),3); // cap how muh a single tick compensates(just incase i forget it means a single tick can compensate for being upto 3x slower, one recovery tick will move things a bounded safe amount instead of an enormous jump)
   lastTickTime = now;
 
 for(const roomId in games){
