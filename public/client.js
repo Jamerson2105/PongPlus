@@ -14,6 +14,7 @@ const winMessageEl = document.getElementById('win-message');
 const playButton = document.getElementById('play-button');
 const rematchButton = document.getElementById('rematch-button');
 const menuButton = document.getElementById('menu-button');
+const statusBarEl = document.getElementById('status-bar');
 
 //play against friend ui elems
 const playFriendButton = document.getElementById('play-friend-button');
@@ -30,14 +31,7 @@ const submitCodeButton = document.getElementById('submit-code-button');
 const privateError = document.getElementById('private-error');
 const privateBackButton = document.getElementById('private-back-button');
 
-const POWERUP_LABELS = {
-  multiBall: 'MULTIBALL',
-  bigPaddle: 'BIG PADDLE',
-  fastBall: 'FAST',
-  slowBall: 'SLOW',
-  explosiveBounce: 'BOOM BALL',
-  teleportGate: 'PORTAL'
-};
+
 
 //particles
 let particles = [];
@@ -102,7 +96,65 @@ function drawTeleportGates(gates) {
   });
 }
 
+function updateStatusBar(game) {
+  const effects = [];
 
+
+  if (game.paddle1.bigTimer > 0) {
+    effects.push({
+      label: `P1: BIG PADDLE`,
+      seconds: (game.paddle1.bigTimer / 60).toFixed(1),
+      percent: (game.paddle1.bigTimer / POWERUP_EFFECT_DURATION_CLIENT) * 100,
+      desc: POWERUP_DESCRIPTIONS.bigPaddle
+    });
+  }
+  if (game.paddle2.bigTimer > 0) {
+    effects.push({
+      label: `P2: BIG PADDLE`,
+      seconds: (game.paddle2.bigTimer / 60).toFixed(1),
+      percent: (game.paddle2.bigTimer / POWERUP_EFFECT_DURATION_CLIENT) * 100,
+      desc: POWERUP_DESCRIPTIONS.bigPaddle
+    });
+  }
+  if (game.ballSpeedEffect.type) {
+    const type = game.ballSpeedEffect.type === 'fast' ? 'fastBall' : 'slowBall';
+    effects.push({
+      label: game.ballSpeedEffect.type === 'fast' ? 'FAST BALL' : 'SLOW BALL',
+      seconds: (game.ballSpeedEffect.timer / 60).toFixed(1),
+      percent: (game.ballSpeedEffect.timer / POWERUP_EFFECT_DURATION_CLIENT) * 100,
+      desc: POWERUP_DESCRIPTIONS[type]
+    });
+  }
+  if (game.teleportGatesTimer > 0) {
+    effects.push({
+      label: 'TELEPORT GATES',
+      seconds: (game.teleportGatesTimer / 60).toFixed(1),
+      percent: (game.teleportGatesTimer / TELEPORT_GATE_LIFETIME_CLIENT) * 100,
+      desc: POWERUP_DESCRIPTIONS.teleportGate
+    });
+  }
+
+  const anyExplosive = game.balls.some(ball => ball.explosive);
+  if (anyExplosive) {//explosive bounce description shows up if any balls are explosive
+    effects.push({
+      label: 'EXPLOSIVE BOUNCE',
+      seconds: null,
+      percent: 100,
+      desc: POWERUP_DESCRIPTIONS.explosiveBounce,
+      indefinite: true
+    });
+  }
+
+  statusBarEl.innerHTML = effects.map(e => `
+    <div class="effect-row">
+      <span class="effect-label">${e.label}${e.seconds !== null ? ` (${e.seconds}s)` : ''}</span>
+      <div class="effect-bar-track">
+        <div class="effect-bar-fill ${e.indefinite ? 'effect-bar-indefinite' : ''}" style="width: ${Math.max(0, Math.min(100, e.percent))}%"></div>
+      </div>
+      <span class="effect-desc">${e.desc}</span>
+    </div>
+  `).join('');
+}
 
 //ui logic
 playButton.addEventListener('click', () => {
@@ -159,7 +211,7 @@ submitCodeButton.addEventListener('click', () => {
   socket.emit('joinPrivateRoom', code);
 });
 
-//game properties
+//game properties, make sure they have the EXACT values as server.js or else ur cooked
 const GAME_WIDTH = 800;
 const GAME_HEIGHT = 400;
 const PADDLE_HEIGHT = 80;
@@ -171,11 +223,30 @@ const BALL_SPEED = 5;
 
 //powerup properties
 const POWERUP_SIZE = 20;
-const BIG_PADDLE_HEIGHT = 160;       // ADD THIS
-const FAST_BALL_MULTIPLIER = 1.8;    // ADD THIS
+const BIG_PADDLE_HEIGHT = 160;       
+const FAST_BALL_MULTIPLIER = 1.8;    
 const SLOW_BALL_MULTIPLIER = 0.5; 
 const POWERUP_LABEL_FONT_SIZE = 8;
+const POWERUP_EFFECT_DURATION_CLIENT = 300; // must match server's POWERUP_EFFECT_DURATION
+const TELEPORT_GATE_LIFETIME_CLIENT = 600;//match with servers value again
 
+const POWERUP_LABELS = {
+  multiBall: 'MULTIBALL',
+  bigPaddle: 'BIG PADDLE',
+  fastBall: 'FAST',
+  slowBall: 'SLOW',
+  explosiveBounce: 'BOOM BALL',
+  teleportGate: 'PORTAL'
+};
+
+const POWERUP_DESCRIPTIONS = {
+  multiBall: 'Splits the ball into three.',
+  bigPaddle: 'Enlarges the collector\'s paddle.',
+  fastBall: 'Speeds up every ball in play.',
+  slowBall: 'Slows down every ball in play.',
+  explosiveBounce: 'Ball gains speed and bursts on every bounce.',
+  teleportGate: 'Two portals teleport any ball.'
+};
 
 
 //draws game
@@ -205,7 +276,7 @@ function drawGame(game){
 function drawPowerUp(powerUp){
   if(!powerUp) return;
 
-  console.log('drawPowerUp is running, drawing:', powerUp.type, 'at', powerUp.x, powerUp.y); // ADD THIS
+  console.log('drawPowerUp is running, drawing:', powerUp.type, 'at', powerUp.x, powerUp.y); 
 
   const cx = powerUp.x + POWERUP_SIZE / 2;//center of the powerup values
   const cy = powerUp.y + POWERUP_SIZE / 2;
@@ -321,6 +392,7 @@ socket.on('startGame', ({roomId, playerNumber:num}) => {
 
 socket.on('gameState', (game) => {
     drawGame(game);
+    updateStatusBar(game);
 });
 
 document.addEventListener('keydown', (e) => { //if key is pressed

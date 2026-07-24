@@ -25,15 +25,14 @@ const PADDLE_SPEED = 6;
 const PADDLE_EDGE_DIST = 20;
 //ball properties
 const BALL_SIZE = 10;
-const BALL_SPEED = 4;
+const BALL_SPEED = 5;
 
 //superpower properties
 const POWERUP_SIZE = 20;
 const POWERUP_SPAWN_INTERVAL = 300; // around 5 seconds at 60fps
 const POWERUP_LIFETIME = 900; //despawns around 15 seconds
 const POWERUP_MAX_COUNT = 3; //max of 3 powerups in the canvas
-const POWERUP_TYPES = [ 'teleportGate' ,'multiBall', 'bigPaddle', 'fastBall', 'slowBall', 'explosiveBounce'];
-
+const POWERUP_TYPES = [ 'explosiveBounce', 'teleportGate' ,'multiBall', 'bigPaddle', 'fastBall', 'slowBall']
 //general powerup duration
 const POWERUP_EFFECT_DURATION = 300;
 const POWERUP_LABEL_FONT_SIZE = 8;
@@ -45,7 +44,7 @@ const BIG_PADDLE_HEIGHT = 160;
 const FAST_BALL_MULTIPLIER = 1.8;    
 const SLOW_BALL_MULTIPLIER = 0.5;   
 //explosive ball
-const EXPLOSIVE_BOUNCE_MULTIPLIER = 1.75;
+const EXPLOSIVE_BOUNCE_MULTIPLIER = 1.35;
 const EXPLOSIVE_MAX_SPEED = 6 *BALL_SPEED;
 //teleport gate
 const TELEPORT_GATE_LIFETIME = 600; // 10 seconds
@@ -87,6 +86,12 @@ function applySpeedMultiplier(game, multiplier) {//increase/decrease ball speed 
     ball.dx = dxSign * BALL_SPEED * multiplier;
     ball.dy = dySign * BALL_SPEED * multiplier;
   });
+}
+
+function currentSpeedMultiplier(game) {
+  if (game.ballSpeedEffect.type === 'fast') return FAST_BALL_MULTIPLIER;
+  if (game.ballSpeedEffect.type === 'slow') return SLOW_BALL_MULTIPLIER;
+  return 1;
 }
 
 function startMatch(socketA, socketB, roomId){
@@ -366,10 +371,18 @@ for(const roomId in games){
       ball.y += ball.dy * deltaMultiplier;
 
       // bounce off top/bottom walls
-      if (ball.y <= 0 || ball.y >= GAME_HEIGHT) {
+      if (ball.y <= 0 && ball.dy <0) {
         ball.dy *= -1;
+        ball.y =0;
         if(ball.explosive){
           io.to(roomId).emit('explosiveBounce',{x: ball.x, y: ball.y});
+        }
+      } else if(ball.y >= GAME_HEIGHT && ball.dy > 0){
+        ball.dy *= -1;
+         ball.y = GAME_HEIGHT; // snap back inside bounds
+        if (ball.explosive) {
+          boostExplosiveBall(ball);
+          io.to(roomId).emit('explosiveBounce', { x: ball.x, y: ball.y });
         }
       }
 
@@ -416,14 +429,15 @@ for(const roomId in games){
           const collectingPlayer = ball.lastHitBy || 1;
 
           if (powerUp.type === 'multiBall') {
+            const mult = currentSpeedMultiplier(game);
             for (let n = 0; n < MULTIBALL_EXTRA_COUNT; n++) {
               const dxSign = Math.random() < 0.5 ? -1 : 1;
               const dySign = Math.random() < 0.5 ? -1 : 1;
               game.balls.push({
                 x: GAME_WIDTH / 2,
                 y: GAME_HEIGHT / 2,
-                dx: dxSign * BALL_SPEED,
-                dy: dySign * BALL_SPEED,
+                dx: dxSign * BALL_SPEED * mult,
+                dy: dySign * BALL_SPEED * mult,
                 lastHitBy: collectingPlayer,
                 explosive: false
               });
@@ -496,8 +510,11 @@ for(const roomId in games){
         if (game.balls.length > 1) {
           game.balls.splice(i, 1); // extra ball — just remove it
         } else {
+          const mult = currentSpeedMultiplier(game);//speed multiplier
           ball.x = GAME_WIDTH / 2; ball.y = GAME_HEIGHT / 2;
-          ball.dx = BALL_SPEED; ball.dy = BALL_SPEED;
+          ball.dx = BALL_SPEED*mult;
+          ball.dy = BALL_SPEED * mult;
+          ball.explosive = false;
         }
       } else if (ball.x > GAME_WIDTH) {
         game.score1++;
@@ -505,8 +522,10 @@ for(const roomId in games){
         if (game.balls.length > 1) {
           game.balls.splice(i, 1);
         } else {
+          const mult = currentSpeedMultiplier(game);
           ball.x = GAME_WIDTH / 2; ball.y = GAME_HEIGHT / 2;
-          ball.dx = -BALL_SPEED; ball.dy = BALL_SPEED;
+          ball.dx = -BALL_SPEED * mult; 
+          ball.dy = BALL_SPEED * mult;
           ball.explosive = false;
         }
       }

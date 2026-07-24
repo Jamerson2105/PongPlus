@@ -175,3 +175,50 @@ body {
   box-shadow: 0 0 20px rgba(178, 178, 178, 0.5);
   display: block;
 }
+
+#status-bar {
+  width: 800px;
+  margin: 12px auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 20px; 
+}
+
+.effect-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 10px;
+  background: rgba(0, 255, 255, 0.05);
+  border: 1px solid #0ff;
+  padding: 6px 10px;
+}
+
+.effect-label {
+  min-width: 140px;
+  color: #0ff;
+  white-space: nowrap;
+}
+
+.effect-desc {
+  flex: 1;
+  color: #999;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.effect-bar-track {
+  width: 100px;
+  height: 8px;
+  background: #111;
+  border: 1px solid #0ff;
+  flex-shrink: 0;
+}
+
+.effect-bar-fill {
+  height: 100%;
+  background: #0ff;
+  transition: width 0.1s linear;
+}
