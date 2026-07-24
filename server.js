@@ -25,7 +25,7 @@ const PADDLE_SPEED = 6;
 const PADDLE_EDGE_DIST = 20;
 //ball properties
 const BALL_SIZE = 10;
-const BALL_SPEED = 5;
+const BALL_SPEED = 4;
 
 //superpower properties
 const POWERUP_SIZE = 20;
