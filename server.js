@@ -54,7 +54,7 @@ const TELEPORT_COOLDOWN = 30; // ~0.5s — prevents instant re-teleport ping-pon
 
 function createGameState(){
     return{
-        balls: [{ x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2, dx: BALL_SPEED, dy: BALL_SPEED ,lastHitBy: null, explosive:false, TELEPORT_COOLDOWN: 0}],
+        balls: [{ x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2, dx: BALL_SPEED, dy: BALL_SPEED ,lastHitBy: null, explosive:false, teleportCooldown: 0}],
         paddle1: { x: PADDLE_EDGE_DIST, y: GAME_HEIGHT / 2 - PADDLE_HEIGHT / 2, height: PADDLE_HEIGHT, bigTimer: 0 },
         paddle2: { x: GAME_WIDTH - PADDLE_EDGE_DIST, y: GAME_HEIGHT / 2 - PADDLE_HEIGHT / 2, height: PADDLE_HEIGHT, bigTimer: 0 },
         score1: 0,
@@ -289,31 +289,38 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
+let lastTickTime = Date.now(); //tracks previous ticks real time
+
 setInterval(() =>{
+
+  const now = Date.now();
+  const delta = now - lastTickTime;
+  const deltaMultiplier = delta/(1000/60);
+  lastTickTime = now;
 
 for(const roomId in games){
     const game = games[roomId];
 
     //move paddles;
-    game.paddle1.y += game.paddle1.dy || 0;
-    game.paddle2.y += game.paddle2.dy || 0;
+    game.paddle1.y += (game.paddle1.dy || 0) * deltaMultiplier;
+    game.paddle2.y += (game.paddle2.dy || 0) * deltaMultiplier;
     game.paddle1.y = Math.max(0, Math.min(GAME_HEIGHT - game.paddle1.height, game.paddle1.y));
     game.paddle2.y = Math.max(0, Math.min(GAME_HEIGHT - game.paddle2.height, game.paddle2.y));
 
 
     //big paddle superpower timer
     if (game.paddle1.bigTimer > 0) {
-      game.paddle1.bigTimer--;
+      game.paddle1.bigTimer -= deltaMultiplier;
       if (game.paddle1.bigTimer <= 0) game.paddle1.height = PADDLE_HEIGHT;
     }
     if (game.paddle2.bigTimer > 0) {
-      game.paddle2.bigTimer--;
+      game.paddle2.bigTimer -= deltaMultiplier;
       if (game.paddle2.bigTimer <= 0) game.paddle2.height = PADDLE_HEIGHT;
     }
 
       // Ball speed effect timer — revert to normal speed when expired
     if (game.ballSpeedEffect.timer > 0) {
-      game.ballSpeedEffect.timer--;
+      game.ballSpeedEffect.timer-= deltaMultiplier;
       if (game.ballSpeedEffect.timer <= 0) {
         game.ballSpeedEffect.type = null;
         applySpeedMultiplier(game, 1);
@@ -322,14 +329,14 @@ for(const roomId in games){
 
       // Teleport gates timer
     if (game.teleportGatesTimer > 0) {
-      game.teleportGatesTimer--;
+      game.teleportGatesTimer -= deltaMultiplier;
       if (game.teleportGatesTimer <= 0) {
         game.teleportGates = [];
       }
     }
     
     //Power-ups
-    game.powerUpTimer--;
+    game.powerUpTimer-= deltaMultiplier;
     if (game.powerUpTimer <= 0) {
       if (game.powerUps.length < POWERUP_MAX_COUNT) {
         const type = POWERUP_TYPES[Math.floor(Math.random() * POWERUP_TYPES.length)];
@@ -346,7 +353,7 @@ for(const roomId in games){
 
     // Age up + despawn expired power-ups
     for (let i = game.powerUps.length - 1; i >= 0; i--) {
-      game.powerUps[i].age++;
+      game.powerUps[i].age += deltaMultiplier;
       if (game.powerUps[i].age >= POWERUP_LIFETIME) {
         game.powerUps.splice(i, 1);
       }
@@ -355,8 +362,8 @@ for(const roomId in games){
     for (let i = game.balls.length - 1; i >= 0; i--) {
       const ball = game.balls[i];
 
-      ball.x += ball.dx;
-      ball.y += ball.dy;
+      ball.x += ball.dx * deltaMultiplier;
+      ball.y += ball.dy * deltaMultiplier;
 
       // bounce off top/bottom walls
       if (ball.y <= 0 || ball.y >= GAME_HEIGHT) {
@@ -455,7 +462,7 @@ for(const roomId in games){
 
       //teleport gate check
       if (ball.teleportCooldown > 0) {
-        ball.teleportCooldown--;
+        ball.teleportCooldown -= deltaMultiplier;
       } else if (game.teleportGates.length === 2) {
         for (let g = 0; g < 2; g++) {
           const gate = game.teleportGates[g];
