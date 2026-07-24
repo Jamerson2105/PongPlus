@@ -34,8 +34,75 @@ const POWERUP_LABELS = {
   multiBall: 'MULTIBALL',
   bigPaddle: 'BIG PADDLE',
   fastBall: 'FAST',
-  slowBall: 'SLOW'
+  slowBall: 'SLOW',
+  explosiveBounce: 'BOOM BALL',
+  teleportGate: 'PORTAL'
 };
+
+//particles
+let particles = [];
+function spawnParticles(x, y, color = 'white') {
+  for (let i = 0; i < 12; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1 + Math.random() * 3;
+    particles.push({
+      x, y,
+      dx: Math.cos(angle) * speed,
+      dy: Math.sin(angle) * speed,
+      life: 20, // frames until it disappears
+      color
+    });
+  }
+}
+
+function updateAndDrawParticles(rgb) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.dx;
+    p.y += p.dy;
+    p.life--;
+
+    if (p.life <= 0) {
+      particles.splice(i, 1);
+      continue;
+    }
+
+    ctx.globalAlpha = p.life / 20;//fade out
+    ctx.fillStyle = p.color; //use particles on color
+    ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+    ctx.globalAlpha = 1;//nothing drawn after stays faded
+  }
+}
+
+//draw teleport gates
+const TELEPORT_GATE_SIZE = 54;
+function drawTeleportGates(gates) {
+  const time = performance.now() / 1000; // seconds, used to drive rotation
+
+  gates.forEach(gate => {
+    ctx.save();
+    ctx.translate(gate.x, gate.y);
+
+
+    // Inner spiral — a curling line that rotates 
+    ctx.rotate(time * 4); 
+    ctx.strokeStyle = 'magenta';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (let a = 0; a < Math.PI * 3; a += 0.2) {
+      const r = (a / (Math.PI * 3)) * (TELEPORT_GATE_SIZE );
+      const x = Math.cos(a) * r;
+      const y = Math.sin(a) * r;
+      if (a === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    ctx.restore();
+  });
+}
+
+
 
 //ui logic
 playButton.addEventListener('click', () => {
@@ -110,8 +177,8 @@ const SLOW_BALL_MULTIPLIER = 0.5;
 const POWERUP_LABEL_FONT_SIZE = 8;
 
 
-//connect fires on the client when it successfully connects to server
 
+//draws game
 function drawGame(game){
     ctx.fillStyle = 'black';
     ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
@@ -120,15 +187,21 @@ function drawGame(game){
     ctx.fillRect(PADDLE_EDGE_DIST, game.paddle1.y, PADDLE_WIDTH, game.paddle1.height);
     ctx.fillRect(GAME_WIDTH - PADDLE_EDGE_DIST, game.paddle2.y, PADDLE_WIDTH, game.paddle2.height);
     game.balls.forEach(ball => {
+      ctx.fillStyle = ball.explosive ? 'orange':'white';//color explosive balls orange and normal balls white
       ctx.fillRect(ball.x - BALL_SIZE / 2, ball.y - BALL_SIZE / 2, BALL_SIZE, BALL_SIZE);
     });
-
+    ctx.fillStyle = 'white'; // reset for anything drawn after (paddles are drawn earlier, so this mainly protects future additions)
+    updateAndDrawParticles();
+    drawTeleportGates(game.teleportGates);
     game.powerUps.forEach(powerUp => drawPowerUp(powerUp)); // drawn last, so its color can't leak onto anything else
 
     document.getElementById('player-score').textContent = game.score1;
     document.getElementById('computer-score').textContent = game.score2;
+
+   
 }
 
+//draws powerups on canvas
 function drawPowerUp(powerUp){
   if(!powerUp) return;
 
@@ -137,11 +210,13 @@ function drawPowerUp(powerUp){
   const cx = powerUp.x + POWERUP_SIZE / 2;//center of the powerup values
   const cy = powerUp.y + POWERUP_SIZE / 2;
 
-  ctx.fillStyle =
+  ctx.fillStyle =//fill powerup color based on powerup type
     powerUp.type === 'multiBall' ? 'cyan' :
     powerUp.type === 'bigPaddle' ? 'lime' :
     powerUp.type === 'fastBall'  ? 'red' :
-    'blue'; // slowBall
+    powerUp.type === 'slowBall'  ? 'blue':
+    powerUp.type === 'explosiveBounce' ? 'orange':
+    'purple'//explosive gate
 
   if (powerUp.type === 'multiBall') {
     // circle
@@ -159,7 +234,7 @@ function drawPowerUp(powerUp){
     ctx.lineTo(powerUp.x + POWERUP_SIZE, powerUp.y + POWERUP_SIZE);
     ctx.closePath();
     ctx.fill();
-  } else {
+  } else if(powerUp.type === 'slowBall'){
     // slowBall — triangle pointing down
     ctx.beginPath();
     ctx.moveTo(cx, powerUp.y + POWERUP_SIZE);
@@ -167,6 +242,28 @@ function drawPowerUp(powerUp){
     ctx.lineTo(powerUp.x + POWERUP_SIZE, powerUp.y);
     ctx.closePath();
     ctx.fill();
+  } else if(powerUp.type === 'explosiveBounce'){
+    ctx.beginPath();
+    ctx.moveTo(cx, powerUp.y);
+    ctx.lineTo(cx + POWERUP_SIZE * 0.15, cy - POWERUP_SIZE * 0.15);
+    ctx.lineTo(powerUp.x + POWERUP_SIZE, cy);
+    ctx.lineTo(cx + POWERUP_SIZE * 0.15, cy + POWERUP_SIZE * 0.15);
+    ctx.lineTo(cx, powerUp.y + POWERUP_SIZE);
+    ctx.lineTo(cx - POWERUP_SIZE * 0.15, cy + POWERUP_SIZE * 0.15);
+    ctx.lineTo(powerUp.x, cy);
+    ctx.lineTo(cx - POWERUP_SIZE * 0.15, cy - POWERUP_SIZE * 0.15);
+    ctx.closePath();
+    ctx.fill();
+  } else if(powerUp.type === 'teleportGate') {
+    // two concentric rings — portal icon
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = ctx.fillStyle;
+    ctx.beginPath();
+    ctx.arc(cx, cy, POWERUP_SIZE / 2, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx, cy, POWERUP_SIZE / 4, 0, Math.PI * 2);
+    ctx.stroke();
   }
   //draw labels under the shapes
   ctx.font = `${POWERUP_LABEL_FONT_SIZE}px 'Press Start 2P', monospace`;
@@ -175,6 +272,7 @@ function drawPowerUp(powerUp){
   ctx.fillText(POWERUP_LABELS[powerUp.type], cx, powerUp.y + POWERUP_SIZE + 12);
 }
 
+//function for shake screen effect
 function shakeScreen(duration = 300, magnitude = 8) {
   const startTime = performance.now();
 
@@ -194,6 +292,8 @@ function shakeScreen(duration = 300, magnitude = 8) {
 
   requestAnimationFrame(animate);
 }
+
+//event listeners
 
 socket.on('connect', ()=> {
     console.log('Connected to server with id: ', socket.id );
@@ -238,6 +338,8 @@ socket.on('gameOver', ({ winner }) => {
   gameContainerEl.style.display = 'none';
   winScreenEl.style.display = 'flex';
   winMessageEl.textContent = (winner === playerNumber) ? 'You Win!' : 'You Lose!';
+  document.getElementById('player-score').textContent = '0';
+  document.getElementById('computer-score').textContent = '0';
   rematchButton.textContent = 'Rematch';
   rematchButton.disabled = false;
 });
@@ -266,4 +368,12 @@ socket.on('privateRoomCreated', ({ code }) => {
 
 socket.on('privateRoomError', (message) => {
   privateError.textContent = message;
+});
+
+socket.on('explosiveBounce', ({ x, y }) => {
+  spawnParticles(x, y, 'orange');
+});
+
+socket.on('ballTeleported', ({ x, y }) => {
+  spawnParticles(x, y, 'purple'); 
 });

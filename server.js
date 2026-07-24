@@ -15,7 +15,7 @@ const availableRooms = [];
 const privateRooms = [];
 
 //game state
-const WIN_SCORE = 1;
+const WIN_SCORE = 10;
 const GAME_WIDTH = 800;
 const GAME_HEIGHT = 400;
 const PADDLE_HEIGHT = 80;
@@ -32,23 +32,37 @@ const POWERUP_SIZE = 20;
 const POWERUP_SPAWN_INTERVAL = 300; // around 5 seconds at 60fps
 const POWERUP_LIFETIME = 900; //despawns around 15 seconds
 const POWERUP_MAX_COUNT = 3; //max of 3 powerups in the canvas
-const POWERUP_TYPES = ['multiBall', 'bigPaddle', 'fastBall', 'slowBall'];
-const MULTIBALL_EXTRA_COUNT = 2;// number of ball multiBall adds;
-const BIG_PADDLE_HEIGHT = 160;       
-const FAST_BALL_MULTIPLIER = 1.8;    
-const SLOW_BALL_MULTIPLIER = 0.5;   
+const POWERUP_TYPES = [ 'teleportGate' ,'multiBall', 'bigPaddle', 'fastBall', 'slowBall', 'explosiveBounce'];
+
+//general powerup duration
 const POWERUP_EFFECT_DURATION = 300;
 const POWERUP_LABEL_FONT_SIZE = 8;
+//multiball
+const MULTIBALL_EXTRA_COUNT = 2;// number of ball multiBall adds;
+//big paddle
+const BIG_PADDLE_HEIGHT = 160;       
+//fast/slow ball
+const FAST_BALL_MULTIPLIER = 1.8;    
+const SLOW_BALL_MULTIPLIER = 0.5;   
+//explosive ball
+const EXPLOSIVE_BOUNCE_MULTIPLIER = 1.75;
+const EXPLOSIVE_MAX_SPEED = 6 *BALL_SPEED;
+//teleport gate
+const TELEPORT_GATE_LIFETIME = 600; // 10 seconds
+const TELEPORT_GATE_SIZE = 54;
+const TELEPORT_COOLDOWN = 30; // ~0.5s — prevents instant re-teleport ping-ponging
 
 function createGameState(){
     return{
-        balls: [{ x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2, dx: BALL_SPEED, dy: BALL_SPEED ,lastHitBy: null}],
+        balls: [{ x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2, dx: BALL_SPEED, dy: BALL_SPEED ,lastHitBy: null, explosive:false, TELEPORT_COOLDOWN: 0}],
         paddle1: { x: PADDLE_EDGE_DIST, y: GAME_HEIGHT / 2 - PADDLE_HEIGHT / 2, height: PADDLE_HEIGHT, bigTimer: 0 },
         paddle2: { x: GAME_WIDTH - PADDLE_EDGE_DIST, y: GAME_HEIGHT / 2 - PADDLE_HEIGHT / 2, height: PADDLE_HEIGHT, bigTimer: 0 },
         score1: 0,
         score2: 0,
         powerUps: [],
         powerUpTimer: POWERUP_SPAWN_INTERVAL,
+        teleportGates: [],
+        teleportGatesTimer: 0,
         ballSpeedEffect: { type: null, timer: 0 } //fast slow or null
     }
 }
@@ -80,6 +94,14 @@ function startMatch(socketA, socketB, roomId){
   socketA.emit('startGame', {roomId, playerNumber: socketA.playerNumber}); 
   socketB.emit('startGame', { roomId, playerNumber: socketB.playerNumber });
 
+}
+
+function boostExplosiveBall(ball) {
+  const speed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
+  const newSpeed = Math.min(speed * EXPLOSIVE_BOUNCE_MULTIPLIER, EXPLOSIVE_MAX_SPEED);
+  const scale = newSpeed / speed;
+  ball.dx *= scale;
+  ball.dy *= scale;
 }
 
 io.on('connection', (socket) => {
@@ -297,6 +319,14 @@ for(const roomId in games){
         applySpeedMultiplier(game, 1);
         }
         }
+
+      // Teleport gates timer
+    if (game.teleportGatesTimer > 0) {
+      game.teleportGatesTimer--;
+      if (game.teleportGatesTimer <= 0) {
+        game.teleportGates = [];
+      }
+    }
     
     //Power-ups
     game.powerUpTimer--;
@@ -331,6 +361,9 @@ for(const roomId in games){
       // bounce off top/bottom walls
       if (ball.y <= 0 || ball.y >= GAME_HEIGHT) {
         ball.dy *= -1;
+        if(ball.explosive){
+          io.to(roomId).emit('explosiveBounce',{x: ball.x, y: ball.y});
+        }
       }
 
         // bounce off paddle 1 (left) — only if moving left
@@ -344,6 +377,10 @@ for(const roomId in games){
         ball.dx *= -1;
         ball.x = game.paddle1.x + PADDLE_WIDTH;
         ball.lastHitBy = 1;
+         if (ball.explosive) {
+          boostExplosiveBall(ball);
+          io.to(roomId).emit('explosiveBounce', { x: ball.x, y: ball.y });
+        }
       }
 
       // bounce off paddle 2 (right) — only if moving right
@@ -380,7 +417,8 @@ for(const roomId in games){
                 y: GAME_HEIGHT / 2,
                 dx: dxSign * BALL_SPEED,
                 dy: dySign * BALL_SPEED,
-                lastHitBy: collectingPlayer
+                lastHitBy: collectingPlayer,
+                explosive: false
               });
             }
           } else if (powerUp.type === 'bigPaddle') {
@@ -393,9 +431,55 @@ for(const roomId in games){
           } else if (powerUp.type === 'slowBall') {
             game.ballSpeedEffect = { type: 'slow', timer: POWERUP_EFFECT_DURATION };
             applySpeedMultiplier(game, SLOW_BALL_MULTIPLIER);
+          } else if (powerUp.type === 'explosiveBounce'){
+            ball.explosive = true;
+          }else if (powerUp.type === 'teleportGate'){
+            const gateA = {
+              x: GAME_WIDTH * 0.25 + Math.random() * GAME_WIDTH * 0.15,
+              y: 40 + Math.random() * (GAME_HEIGHT - 80)
+            };
+
+            const gateB = {
+              x: GAME_WIDTH * 0.6 + Math.random() * GAME_WIDTH * 0.15,
+              y: 40 + Math.random() * (GAME_HEIGHT - 80)
+            }
+
+            game.teleportGates = [gateA, gateB];
+            game.teleportGatesTimer = TELEPORT_GATE_LIFETIME;
+
           }
 
           game.powerUps.splice(p, 1); // remove just this one power-up
+        }
+      }
+
+      //teleport gate check
+      if (ball.teleportCooldown > 0) {
+        ball.teleportCooldown--;
+      } else if (game.teleportGates.length === 2) {
+        for (let g = 0; g < 2; g++) {
+          const gate = game.teleportGates[g];
+          const hit =
+            ball.x + BALL_SIZE / 2 >= gate.x - TELEPORT_GATE_SIZE / 2 &&
+            ball.x - BALL_SIZE / 2 <= gate.x + TELEPORT_GATE_SIZE / 2 &&
+            ball.y + BALL_SIZE / 2 >= gate.y - TELEPORT_GATE_SIZE / 2 &&
+            ball.y - BALL_SIZE / 2 <= gate.y + TELEPORT_GATE_SIZE / 2;
+
+          if (hit) {
+            const otherGate = game.teleportGates[1 - g];
+            ball.x = otherGate.x;
+            ball.y = otherGate.y;
+
+            // push the ball forward along its current direction so it doesn't
+            // immediately overlap the exit gate again
+            const speed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
+            ball.x += (ball.dx / speed) * (TELEPORT_GATE_SIZE + 5);
+            ball.y += (ball.dy / speed) * (TELEPORT_GATE_SIZE + 5);
+
+            ball.teleportCooldown = TELEPORT_COOLDOWN;
+            io.to(roomId).emit('ballTeleported', { x: ball.x, y: ball.y });
+            break; // stop checking gates for this ball this frame
+          }
         }
       }
       // scoring
@@ -416,8 +500,15 @@ for(const roomId in games){
         } else {
           ball.x = GAME_WIDTH / 2; ball.y = GAME_HEIGHT / 2;
           ball.dx = -BALL_SPEED; ball.dy = BALL_SPEED;
+          ball.explosive = false;
         }
       }
+
+      //testing
+      // if(ball.x < 0 || ball.x > GAME_WIDTH){
+      //   ball.dx *= -1;
+      //   ball.dy *= -1;
+      // }
     }
     
     
