@@ -368,7 +368,7 @@ function shakeScreen(duration = 300, magnitude = 8) {
 
 socket.on('connect', ()=> {
     console.log('Connected to server with id: ', socket.id );
-    statusEl.textContent = ` Your ID: ${socket.id}`;
+    statusEl.textContent = ` Connected! In game`;
 });
 
 socket.on('disconnect', () => {
