@@ -368,7 +368,7 @@ function shakeScreen(duration = 300, magnitude = 8) {
 
 socket.on('connect', ()=> {
     console.log('Connected to server with id: ', socket.id );
-    statusEl.textContent = ` Connected! In game`;
+    statusEl.textContent = ` Connected!`;
 });
 
 socket.on('disconnect', () => {
@@ -383,7 +383,7 @@ socket.on('startGame', ({roomId, playerNumber:num}) => {
     document.getElementById('player-label').textContent = `You are Player ${playerNumber}`;
     winScreenEl.style.display = 'none';
     menuEl.style.display = 'none';
-    statusEl.textContent = `ID =  ${socket.id}`;
+    statusEl.textContent = `Connected! In game`;
     privateMenuEl.style.display = 'none';
     gameContainerEl.style.display = 'block';
     document.getElementById('player-score').textContent = '0';
